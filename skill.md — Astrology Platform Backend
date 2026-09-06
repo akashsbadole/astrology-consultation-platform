@@ -1,0 +1,116 @@
+# SKILL.md — Astrology Platform Backend
+
+Read this before writing any code in this repo. It exists so a new AI
+session (or a new engineer) doesn't relearn the same lessons the hard
+way — every rule below came from a real bug that was caught and fixed
+during development, not a hypothetical.
+
+---
+
+## Non-negotiable rules (breaking these WILL reintroduce fixed bugs)
+
+1. **Every new model module MUST be imported in `app/scripts/init_db.py`**
+   and `app/scripts/cleanup_tokens.py` if it defines a table. `SQLModel.metadata`
+   is only populated as a side effect of a model module being imported
+   somewhere. A standalone script that doesn't import your new model will
+   silently create ZERO tables for it — no error, nothing. This exact bug
+   shipped once already (Kundli's own model) before being caught.
+
+2. **Schema creation (`create_all`) NEVER runs inside `app/main.py`'s
+   lifespan.** It's a separate one-shot step (`migrate` service in
+   docker-compose.yml). With 2+ gunicorn workers, every worker running
+   `create_all` independently on boot races and crashes ("table already
+   exists"). If you add a new startup task, ask whether it's safe to run
+   from N concurrent processes before putting it in `lifespan`.
+
+3. **`AsyncSession` must be created with `expire_on_commit=False`**
+   (already set in `app/core/db.py` — don't remove it). Without it, any
+   second commit in the same session (e.g. inserting a RefreshToken row
+   after already committing a User) expires the User object's attributes,
+   and reading them afterward crashes with `MissingGreenlet` because the
+   lazy-reload needs an async context that a sync `model_validate()` call
+   doesn't have.
+
+4. **Any code that does long-running background work (APScheduler jobs,
+   startup tasks) must be started inside the `lifespan` context, never
+   at module import time.** Starting a scheduler before Uvicorn's event
+   loop exists raises `RuntimeError: no running event loop` and crashes
+   every worker on boot.
+
+5. **Datetime columns must use `sa_column=Column(DateTime(timezone=True))`
+   explicitly** (see the `_tz_aware_column()` helper pattern in
+   `app/models/user.py`). Without it, comparing a DB-read datetime
+   against `datetime.now(timezone.utc)` raises `TypeError: can't compare
+   offset-naive and offset-aware`. This bites on Postgres too, not just
+   SQLite — it's not a test-only concern.
+
+6. **Never divide by `360/27` (or any repeating decimal derived from a
+   zodiac fraction) when computing a nakshatra/sign index.** Floating-
+   point imprecision can misclassify a longitude sitting exactly on a
+   boundary into the *previous* bucket. Always multiply first, divide by
+   an exact integer last — see `nakshatra_index_and_fraction()` in
+   `app/services/kundli/ephemeris.py` for the pattern, and use it rather
+   than reimplementing boundary math elsewhere.
+
+7. **Every wallet balance change goes through `WalletService.debit()` or
+   `.credit()` — never a direct `UPDATE wallets` anywhere else.** This is
+   what makes the ledger (`wallet_transactions`) trustworthy. `debit()`
+   uses `SELECT ... FOR UPDATE` and must `rollback()` (not just return)
+   on every early-return path, or the row lock stays held until some
+   unrelated later commit closes it — a real bug that shipped once.
+
+8. **The refresh-token cookie/JSON split is load-bearing security, not a
+   style choice.** Web gets an httpOnly Secure SameSite=Strict cookie and
+   *never* the token in the JSON body; mobile gets it in the JSON body
+   (stored in `expo-secure-store`). If you add a new endpoint that issues
+   tokens, route it through `_issue_token_pair()` in `app/routers/auth.py`
+   rather than hand-rolling issuance.
+
+9. **Admin accounts can never be created through self-service** — not
+   registration, not Google Sign-In. The only path is
+   `app/scripts/promote_admin.py`, run with server access. If you add a
+   new account-creation path, it must explicitly reject `role=admin`.
+
+---
+
+## Testing this codebase
+
+- `backend/run_real_tests.py` — real integration tests over real HTTP
+  calls (httpx `ASGITransport`) against a real database. Not mocks except
+  at genuinely external boundaries (Google's token verification).
+- **Known open issue**: the wallet-concurrency test block hits
+  `MissingGreenlet` under real Postgres when firing 5 concurrent sessions
+  via `asyncio.gather`. The underlying `WalletService.debit()` logic is
+  separately proven correct (an isolated script gets exactly 1
+  success/4 correctly-rejected/balance exactly 0) — this is an
+  unresolved test-harness issue, not a confirmed app bug. Don't assume
+  it's fixed; verify before relying on that specific test.
+- This sandbox's background services (Postgres, Redis, anything started
+  with plain `nohup ... &`) die between separate tool-call boundaries.
+  Prefer the in-process `httpx.ASGITransport` pattern over booting a real
+  gunicorn server + curl for anything you need to verify reliably.
+- Always test the *actual* production command sequence when in doubt:
+  `python -m app.scripts.init_db` then
+  `gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 2 ...` —
+  several real bugs only appeared with 2+ workers, never with 1.
+
+## Structure
+
+```
+app/
+├── core/        # config, security, db, rate limiting, 3rd-party clients (razorpay, livekit, email)
+├── models/      # SQLModel tables — remember rule #1 above for every new one
+├── schemas/     # Pydantic request/response shapes
+├── routers/     # one file per domain, thin — business logic lives in services/
+├── services/    # the actual logic: wallet_service, billing_service, ranking, kundli/*
+├── sockets/     # Socket.IO event handlers (chat)
+├── workers/     # APScheduler jobs
+└── scripts/     # one-off CLI scripts (init_db, promote_admin, cleanup_tokens)
+```
+
+## Before starting a new module
+
+Read `BACKEND-SPEC.md` for the intended endpoint shape and business
+rules — it was written as the full spec before implementation started,
+and most modules follow it closely. `FEATURES.md` tracks what's actually
+been built versus what's still spec-only.
