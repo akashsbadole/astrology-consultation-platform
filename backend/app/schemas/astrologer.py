@@ -30,6 +30,9 @@ class StatusUpdateRequest(BaseModel):
 
 class AstrologerPublic(BaseModel):
     id: uuid.UUID
+    # The owning User's id — lets a client match "my astrologer profile"
+    # against /auth/me (Astrologer.id is its own row PK, not the user's).
+    user_id: uuid.UUID
     full_name: str | None
     bio: str | None
     experience_years: int

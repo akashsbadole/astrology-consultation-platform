@@ -13,6 +13,7 @@ export type AstrologerStatus = 'pending' | 'interview' | 'probation' | 'active' 
 
 export type AstrologerPublic = {
   id: string;
+  user_id: string;
   full_name: string | null;
   bio: string | null;
   experience_years: number;

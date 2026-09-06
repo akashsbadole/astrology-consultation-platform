@@ -16,7 +16,7 @@ export default function AstrologerDashboardPage() {
     queryFn: async () => {
       const me = await api.me();
       const list = await api.listAstrologers({ page: 1 });
-      const match = list.items.find((a) => a.id === me.id);
+      const match = list.items.find((a) => a.user_id === me.id);
       return match ?? null;
     },
   });

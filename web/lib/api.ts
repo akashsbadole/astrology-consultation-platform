@@ -82,23 +82,42 @@ async function request<T>(
   return res.json();
 }
 
+/**
+ * Single-flight refresh: concurrent callers share ONE in-flight refresh call.
+ *
+ * This matters more than it looks: the backend rotates refresh tokens on every
+ * /auth/refresh and treats a re-presented (already-rotated) token as theft —
+ * revoking EVERY active token for that user. In dev, React StrictMode
+ * double-invokes the AuthHydrator effect, and without this guard two
+ * concurrent refreshes fire with the same cookie: the second one trips replay
+ * detection, kills the whole session server-side, and the app bounces back to
+ * /login right after a successful login.
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
 export async function refreshSession(): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    });
-    if (!res.ok) {
-      setAccessToken(null);
-      clearSessionCookie();
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        setAccessToken(null);
+        clearSessionCookie();
+        return false;
+      }
+      const data: TokenPair = await res.json();
+      setAccessToken(data.access_token);
+      return true;
+    } catch {
       return false;
+    } finally {
+      refreshInFlight = null;
     }
-    const data: TokenPair = await res.json();
-    setAccessToken(data.access_token);
-    return true;
-  } catch {
-    return false;
-  }
+  })();
+  return refreshInFlight;
 }
 
 export const api = {
@@ -167,13 +186,25 @@ export const api = {
     online_only?: boolean;
     page?: number;
   }): Promise<{ items: AstrologerPublic[]; total: number; page: number; pages: number }> {
+    // The backend returns a bare array and paginates with limit/offset (no
+    // total count), so translate the page-based contract here.
+    const page = params?.page ?? 1;
+    const perPage = 20; // backend default limit
     const qs = new URLSearchParams();
     if (params?.specialization) qs.set('specialization', params.specialization);
     if (params?.language) qs.set('language', params.language);
     if (params?.online_only) qs.set('online_only', 'true');
-    if (params?.page) qs.set('page', String(params.page));
-    const query = qs.toString();
-    return request(`/astrologers${query ? `?${query}` : ''}`, { auth: true });
+    qs.set('limit', String(perPage));
+    qs.set('offset', String((page - 1) * perPage));
+
+    const rows = await request<AstrologerPublic[]>(`/astrologers?${qs.toString()}`, { auth: true });
+    return {
+      items: rows,
+      total: rows.length,
+      page,
+      // Unknown server-side total: a full page implies at least one more.
+      pages: page + (rows.length === perPage ? 1 : 0),
+    };
   },
 
   async getAstrologer(id: string): Promise<AstrologerPublic> {

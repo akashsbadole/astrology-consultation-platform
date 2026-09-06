@@ -25,7 +25,7 @@ router = APIRouter(prefix="/astrologers", tags=["astrologers"])
 
 def _to_public(astrologer: Astrologer, full_name: str | None) -> AstrologerPublic:
     return AstrologerPublic(
-        id=astrologer.id, full_name=full_name, bio=astrologer.bio,
+        id=astrologer.id, user_id=astrologer.user_id, full_name=full_name, bio=astrologer.bio,
         experience_years=astrologer.experience_years, specializations=astrologer.specializations,
         languages=astrologer.languages, rate_per_minute_paise=astrologer.rate_per_minute_paise,
         is_online=astrologer.is_online, avg_rating=astrologer.avg_rating,
