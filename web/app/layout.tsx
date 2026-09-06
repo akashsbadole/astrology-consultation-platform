@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Fraunces, Manrope } from 'next/font/google';
-import { Providers } from '../components/Providers';
+import { Providers } from '@/components/Providers';
 import './globals.css';
 
 const fraunces = Fraunces({

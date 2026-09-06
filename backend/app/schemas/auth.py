@@ -47,6 +47,17 @@ class VerifyEmailRequest(BaseModel):
     token: str
 
 
+class SendOtpRequest(BaseModel):
+    phone: str = Field(min_length=10, max_length=15)
+
+
+class VerifyOtpRequest(BaseModel):
+    phone: str
+    code: str = Field(min_length=6, max_length=6)
+    full_name: str | None = Field(default=None, max_length=120)
+    role: UserRole = UserRole.customer
+
+
 class UpdateProfileRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=120)
     avatar_url: str | None = Field(default=None, max_length=500)

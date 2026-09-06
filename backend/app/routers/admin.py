@@ -62,6 +62,39 @@ async def reject_astrologer(astrologer_id: uuid.UUID, session: AsyncSession = De
     return {"id": str(astrologer.id), "status": astrologer.status}
 
 
+@router.get("/users")
+async def list_users(
+    page: int = 1,
+    session: AsyncSession = Depends(get_session),
+):
+    page_size = 50
+    from sqlmodel import func
+    count_result = await session.exec(select(func.count()).select_from(User))
+    total = count_result.one()
+    pages = max(1, (total + page_size - 1) // page_size)
+
+    result = await session.exec(
+        select(User).offset((page - 1) * page_size).limit(page_size)
+    )
+    users = result.all()
+    return {
+        "items": [
+            {
+                "id": str(u.id),
+                "email": u.email,
+                "full_name": u.full_name,
+                "role": u.role,
+                "is_active": u.is_active,
+                "created_at": str(u.created_at) if hasattr(u, "created_at") else None,
+            }
+            for u in users
+        ],
+        "total": total,
+        "page": page,
+        "pages": pages,
+    }
+
+
 @router.patch("/users/{user_id}/deactivate")
 async def deactivate_user(user_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
     user = await session.get(User, user_id)

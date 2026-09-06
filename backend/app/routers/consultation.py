@@ -16,6 +16,39 @@ from app.services.billing_service import FREE_SESSION_SECONDS, settle
 router = APIRouter(prefix="/consultations", tags=["consultations"])
 
 
+@router.get("")
+async def list_consultations(
+    page: int = 1,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    page_size = 20
+    # If user is an astrologer, filter to their consultations
+    astrologer_result = await session.exec(select(Astrologer).where(Astrologer.user_id == user.id))
+    astrologer = astrologer_result.first()
+
+    query = select(Consultation)
+    if astrologer:
+        query = query.where(Consultation.astrologer_id == astrologer.id)
+    else:
+        query = query.where(Consultation.client_id == user.id)
+
+    from sqlmodel import func
+    count_result = await session.exec(select(func.count()).select_from(query.subquery()))
+    total = count_result.one()
+    pages = max(1, (total + page_size - 1) // page_size)
+
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await session.exec(query)
+    items = result.all()
+    return {
+        "items": [ConsultationOut.model_validate(c) for c in items],
+        "total": total,
+        "page": page,
+        "pages": pages,
+    }
+
+
 async def _has_ever_had_a_consultation(session: AsyncSession, client_id: uuid.UUID) -> bool:
     result = await session.exec(select(Consultation).where(Consultation.client_id == client_id))
     return result.first() is not None

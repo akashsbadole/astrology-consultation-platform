@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "AstroConnect",
+    "slug": "astroconnect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "astroconnect",
+    "splash": {
+      "backgroundColor": "#12132B",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.astroconnect.app",
+      "config": {
+        "googleSignIn": {
+          "reservedClientId": "com.googleusercontent.apps"
+        }
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#12132B"
+      },
+      "package": "com.astroconnect.app",
+      "googleServicesFile": "./google-services.json"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "scopes": ["profile", "email"],
+          "webClientId": "YOUR_WEB_CLIENT_ID"
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "node_modules/@expo-google-fonts/fraunces/Fraunces_600SemiBold.ttf",
+            "node_modules/@expo-google-fonts/fraunces/Fraunces_500Medium.ttf",
+            "node_modules/@expo-google-fonts/manrope/Manrope_400Regular.ttf",
+            "node_modules/@expo-google-fonts/manrope/Manrope_600SemiBold.ttf",
+            "node_modules/@expo-google-fonts/manrope/Manrope_700Bold.ttf"
+          ]
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
+    }
+  }
+}

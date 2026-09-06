@@ -34,7 +34,12 @@ Key design decisions encoded in this file (read before modifying):
 """
 from datetime import datetime, timedelta, timezone
 from typing import Literal
+import hashlib
+import os
+import secrets
 import uuid
+
+import redis.asyncio as redis
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlmodel import select
@@ -64,9 +69,11 @@ from app.schemas.auth import (
     PasswordResetRequest,
     RefreshRequest,
     RegisterRequest,
+    SendOtpRequest,
     TokenPair,
     UserPublic,
     VerifyEmailRequest,
+    VerifyOtpRequest,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -74,6 +81,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 Platform = Literal["web", "mobile"]
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/auth"
+
+_otp_redis = redis.from_url(os.environ.get("REDIS_URL", "redis://redis:6379"), decode_responses=True)
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -430,3 +439,54 @@ async def verify_email(body: VerifyEmailRequest, session: AsyncSession = Depends
     user.email_verified = True
     session.add(user)
     await session.commit()
+
+
+def _otp_key(phone: str) -> str:
+    return f"otp:{hashlib.sha256(phone.encode()).hexdigest()}"
+
+
+@router.post("/otp/send", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/hour")
+async def send_otp(request: Request, body: SendOtpRequest):
+    code = str(secrets.randbelow(1000000)).zfill(6)
+    await _otp_redis.set(_otp_key(body.phone), code, ex=300)
+
+    if os.environ.get("SMS_PROVIDER_API_KEY"):
+        print(f"[SMS] OTP for {body.phone}: {code}")
+    else:
+        print(f"[DEV] OTP for {body.phone}: {code}")
+
+
+@router.post("/otp/verify", response_model=TokenPair)
+@limiter.limit("10/hour")
+async def verify_otp(
+    request: Request,
+    response: Response,
+    body: VerifyOtpRequest,
+    platform: Platform = "mobile",
+    session: AsyncSession = Depends(get_session),
+):
+    key = _otp_key(body.phone)
+    stored_code = await _otp_redis.get(key)
+
+    if stored_code is None or stored_code != body.code:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP")
+
+    await _otp_redis.delete(key)
+
+    result = await session.exec(select(User).where(User.phone == body.phone))
+    user = result.first()
+
+    if user is None:
+        user = User(
+            email=f"otp+{body.phone}@phone.local",
+            phone=body.phone,
+            full_name=body.full_name or "User",
+            role=body.role,
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        await ensure_wallet(session, user.id)
+
+    return await _issue_token_pair(user, session, response, platform)

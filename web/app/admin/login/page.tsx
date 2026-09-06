@@ -3,10 +3,10 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { AuthInput } from '../../../components/AuthInput';
-import { GoogleSignInButton } from '../../../components/GoogleSignInButton';
-import { PrimaryButton } from '../../../components/PrimaryButton';
-import { ApiError, api } from '../../../lib/api';
+import { AuthInput } from '@/components/AuthInput';
+import { GoogleSignInButton } from '@/components/GoogleSignInButton';
+import { PrimaryButton } from '@/components/PrimaryButton';
+import { ApiError, api } from '@/lib/api';
 
 /**
  * Deliberately no celestial motif, no "create an account" link, flat

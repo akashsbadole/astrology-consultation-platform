@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -17,6 +18,8 @@ class ConsultationOut(BaseModel):
     status: ConsultationStatus
     is_free_session: bool
     total_billed_paise: int
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
 
     class Config:
         from_attributes = True

@@ -39,6 +39,7 @@ class User(SQLModel, table=True):
     # password and a google_id (e.g. registered by email, later linked Google).
     google_id: str | None = Field(default=None, index=True, unique=True)
 
+    phone: str | None = Field(default=None, index=True, unique=True)
     full_name: str | None = Field(default=None)
     avatar_url: str | None = Field(default=None)
 

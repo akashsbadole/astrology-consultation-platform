@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { AuthInput } from '../../../components/AuthInput';
-import { CelestialMotif } from '../../../components/CelestialMotif';
-import { GoogleSignInButton } from '../../../components/GoogleSignInButton';
-import { PrimaryButton } from '../../../components/PrimaryButton';
-import { ApiError, api } from '../../../lib/api';
+import { AuthInput } from '@/components/AuthInput';
+import { CelestialMotif } from '@/components/CelestialMotif';
+import { GoogleSignInButton } from '@/components/GoogleSignInButton';
+import { PrimaryButton } from '@/components/PrimaryButton';
+import { ApiError, api } from '@/lib/api';
 
 /**
  * Creates the LOGIN identity only (role: astrologer). The full

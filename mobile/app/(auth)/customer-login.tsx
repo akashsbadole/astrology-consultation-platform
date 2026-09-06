@@ -103,6 +103,12 @@ export default function CustomerLoginScreen() {
               </View>
 
               <GoogleSignInButton onPress={handleGoogleLogin} loading={googleLoading} />
+
+              <View style={styles.otpLinkRow}>
+                <Pressable onPress={() => router.push('/otp-login')} hitSlop={8}>
+                  <Text style={styles.otpLink}>Sign in with phone number</Text>
+                </Pressable>
+              </View>
             </View>
 
             <View style={styles.footer}>
@@ -190,6 +196,14 @@ const styles = StyleSheet.create({
   },
   footerLinkSecondary: {
     ...type.caption,
+    color: colors.mist,
+  },
+  otpLinkRow: {
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  otpLink: {
+    ...type.body,
     color: colors.mist,
   },
 });

@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { AuthInput } from '../../../components/AuthInput';
-import { CelestialMotif } from '../../../components/CelestialMotif';
-import { GoogleSignInButton } from '../../../components/GoogleSignInButton';
-import { PrimaryButton } from '../../../components/PrimaryButton';
-import { ApiError, api } from '../../../lib/api';
+import { AuthInput } from '@/components/AuthInput';
+import { CelestialMotif } from '@/components/CelestialMotif';
+import { GoogleSignInButton } from '@/components/GoogleSignInButton';
+import { PrimaryButton } from '@/components/PrimaryButton';
+import { ApiError, api } from '@/lib/api';
 
 export default function CustomerLoginPage() {
   const router = useRouter();
@@ -89,6 +89,12 @@ export default function CustomerLoginPage() {
           </div>
 
           <GoogleSignInButton onIdToken={handleGoogleIdToken} onError={() => setError('Google sign-in failed.')} />
+
+          <div className="mt-4 text-center">
+            <Link href="/otp-login" className="text-[14px] text-mist hover:text-brass">
+              Sign in with phone number
+            </Link>
+          </div>
         </form>
 
         <div className="mt-8 flex flex-col items-center gap-2 text-center">
