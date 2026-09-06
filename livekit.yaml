@@ -1,0 +1,10 @@
+# Minimal self-hosted LiveKit config. This is a working single-node
+# setup, not a hardened production one — for real production scale
+# you'd add a TURN server for clients behind restrictive NATs and tune
+# the port range based on observed concurrent-call load.
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true

@@ -1,0 +1,45 @@
+# Caddy automatically provisions and renews Let's Encrypt certificates for
+# both domains below — no certbot, no manual renewal cron job. The only
+# requirement: both DNS records must already point at this VPS's IP before
+# you start this stack, or certificate issuance will fail.
+#
+# IMPORTANT: web and api MUST be subdomains of the same parent domain
+# (e.g. example.com and api.example.com) — NOT two unrelated domains. The
+# backend's refresh-token cookie is set with SameSite=Strict, which is
+# only sent on requests between origins that share the same registrable
+# domain. Two separate domains would silently break login persistence on
+# the web app (every page refresh would look like a logout).
+
+(security_headers) {
+	header {
+		# Caddy already enforces HTTPS for automatic-cert sites, but HSTS
+		# additionally tells the BROWSER to never even try plain HTTP for
+		# this domain again, closing the window for a downgrade attack on
+		# the very first request.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), camera=(), microphone=()"
+		# Removes Caddy's own version banner from responses — no reason to
+		# hand an attacker your exact server version for free.
+		-Server
+	}
+}
+
+{$DOMAIN} {
+	import security_headers
+	reverse_proxy web:3000
+}
+
+{$API_DOMAIN} {
+	import security_headers
+	# Caps request body size at the edge, before it ever reaches the
+	# backend — a cheap, effective guard against large-payload abuse on
+	# endpoints that have no legitimate reason to receive a big body
+	# (every auth endpoint's real payload is a few hundred bytes at most).
+	request_body {
+		max_size 1MB
+	}
+	reverse_proxy backend:8000
+}

@@ -1,0 +1,148 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-astrology}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-astrology}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-astrology}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Deliberately no `ports:` mapping — Postgres is reachable only from
+    # other containers on the internal network below, never directly from
+    # the internet. If you need to inspect it from your own machine, use
+    # `docker compose exec postgres psql ...` or a temporary SSH tunnel,
+    # not an exposed port.
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  # One-shot: creates the database schema, then exits. Deliberately
+  # separate from the `backend` service — see backend/app/scripts/init_db.py
+  # for why running this inside every worker's own startup is wrong.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python -m app.scripts.init_db
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-astrology}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-astrology}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET must be set in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set in .env}
+      GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID:?GOOGLE_WEB_CLIENT_ID must be set in .env}
+      ALLOWED_ORIGINS: '["https://${DOMAIN}"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-astrology}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-astrology}
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID}
+      ALLOWED_ORIGINS: '["https://${DOMAIN}"]'
+      WEB_CONCURRENCY: ${BACKEND_WORKERS:-2}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      APP_BASE_URL: ${APP_BASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+    # No host port published — only Caddy talks to this, over the internal
+    # network, by service name (backend:8000).
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      # LiveKit's WebRTC media needs real UDP reachability — unlike
+      # everything else in this stack, this can't stay behind Caddy.
+      # 7880/tcp: signaling (WS). 50000-50100/udp: media — narrow range
+      # kept small for a single small VPS; widen if you see connection
+      # issues under real concurrent call load.
+      - "7880:7880"
+      - "50000-50100:50000-50100/udp"
+    networks: [internal]
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        # Baked into the client JS bundle at BUILD time (Next.js requirement
+        # for NEXT_PUBLIC_* vars) — this is why these are `args:`, not
+        # `environment:`. Changing them requires a rebuild, not just a restart.
+        NEXT_PUBLIC_API_BASE_URL: https://${API_DOMAIN}
+        NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks: [internal]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set in .env}
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN must be set in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - web
+    networks: [internal]
+
+networks:
+  internal:
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

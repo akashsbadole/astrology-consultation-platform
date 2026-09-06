@@ -1,0 +1,30 @@
+# Exact-pinned, not >=, deliberately. This is what was actually installed
+# and run against the full test suite (backend/run_real_tests.py, 38/38
+# passing) — a floating >= constraint means a `pip install` six months
+# from now can silently pull in an untested version and break something
+# in a way that's hard to trace back to a dependency bump. Bump these
+# deliberately, one at a time, re-running the test suite after each.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+gunicorn==26.2.0
+orjson==3.12.0
+sqlmodel==0.0.42
+sqlalchemy==2.0.52
+asyncpg==0.31.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-jose[cryptography]==3.5.0
+passlib[argon2]==1.7.4
+argon2-cffi==25.1.0
+slowapi==0.1.10
+redis==8.1.0
+google-auth==2.57.0
+requests==2.34.2
+email-validator==2.3.0
+python-multipart==0.0.32
+pyswisseph==2.10.3.2
+razorpay==2.0.1
+fastapi-socketio==0.0.10
+apscheduler==3.11.3
+livekit-api==1.2.1
+pyjwt==2.10.1

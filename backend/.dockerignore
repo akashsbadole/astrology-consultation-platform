@@ -1,0 +1,9 @@
+__pycache__
+*.pyc
+.venv
+venv
+.env
+test.db
+run_real_tests.py
+.git
+.pytest_cache
