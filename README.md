@@ -40,8 +40,13 @@ deliberate.
 ### Backend
 ```bash
 cd backend
+# Windows, macOS, and Linux
+python -m venv .venv
+.venv\Scripts\activate.bat
+
 pip install -r requirements.txt
 cp .env.example .env   # fill in DATABASE_URL, JWT secrets, GOOGLE_WEB_CLIENT_ID
+python -m app.scripts.init_db
 uvicorn app.main:app --reload
 ```
 Set `ALLOWED_ORIGINS` in `.env` to include your actual web app origin (e.g.

@@ -28,3 +28,4 @@ fastapi-socketio==0.0.10
 apscheduler==3.11.3
 livekit-api==1.2.1
 pyjwt==2.10.1
+psycopg2
