@@ -15,14 +15,24 @@ exist" — using the same code path for both is what keeps this from
 becoming a new email-enumeration side channel (see DUMMY_PASSWORD_HASH in
 security.py for the timing half of that same guarantee).
 """
-import os
+import time
 
 import redis.asyncio as redis
+
+from app.core.config import settings
 
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_WINDOW_SECONDS = 15 * 60  # 15 minutes
 
-_redis = redis.from_url(os.environ.get("REDIS_URL", "redis://redis:6379"), decode_responses=True)
+# Redis-backed in production; an in-memory fallback is used in local/dev so the
+# app runs with no Redis server. (Redis gives a shared counter across workers;
+# the in-memory store is fine for a single local process.)
+_redis = (
+    redis.from_url(settings.redis_url, decode_responses=True, protocol=2)
+    if settings.use_redis
+    else None
+)
+_local_failures: dict[str, tuple[int, float]] = {}
 
 
 def _key(email: str) -> str:
@@ -30,8 +40,17 @@ def _key(email: str) -> str:
 
 
 async def is_locked_out(email: str) -> bool:
-    count = await _redis.get(_key(email))
-    return count is not None and int(count) >= MAX_FAILED_ATTEMPTS
+    if _redis is not None:
+        count = await _redis.get(_key(email))
+        return count is not None and int(count) >= MAX_FAILED_ATTEMPTS
+    entry = _local_failures.get(_key(email))
+    if entry is None:
+        return False
+    count, expire = entry
+    if time.time() > expire:
+        _local_failures.pop(_key(email), None)
+        return False
+    return count >= MAX_FAILED_ATTEMPTS
 
 
 async def record_failed_attempt(email: str) -> None:
@@ -40,10 +59,20 @@ async def record_failed_attempt(email: str) -> None:
     # 15 minutes from the FIRST recent failure, not extended forever by
     # each subsequent one — a slow trickle of attempts still eventually
     # expires instead of locking the account out indefinitely.
-    count = await _redis.incr(key)
+    if _redis is not None:
+        count = await _redis.incr(key)
+        if count == 1:
+            await _redis.expire(key, LOCKOUT_WINDOW_SECONDS)
+        return
+    count, expire = _local_failures.get(key, (0, 0.0))
+    count += 1
     if count == 1:
-        await _redis.expire(key, LOCKOUT_WINDOW_SECONDS)
+        expire = time.time() + LOCKOUT_WINDOW_SECONDS
+    _local_failures[key] = (count, expire)
 
 
 async def clear_failed_attempts(email: str) -> None:
-    await _redis.delete(_key(email))
+    if _redis is not None:
+        await _redis.delete(_key(email))
+        return
+    _local_failures.pop(_key(email), None)

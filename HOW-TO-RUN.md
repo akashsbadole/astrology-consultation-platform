@@ -2,6 +2,14 @@
 
 Three ways to run this, fastest to most production-like. Pick based on what you're doing.
 
+
+## credential
+
+Test Accounts
+- admin@test.com / Admin123! → admin panel
+- customer@test.com / Customer123! → customer dashboard  
+- astrologer@test.com / Astro123! → astrologer panel
+
 ---
 
 ## Option A — Fastest: infra in Docker, app code running directly (best for active development)
@@ -17,6 +25,7 @@ docker compose up -d postgres redis
 ```bash
 cd backend
 python3 -m venv venv && source venv/bin/activate    # Windows: venv\Scripts\activate
+.venv\Scripts\Activate
 pip install -r requirements.txt
 
 export DATABASE_URL="postgresql+asyncpg://astrology:yourpassword@localhost:5432/astrology"

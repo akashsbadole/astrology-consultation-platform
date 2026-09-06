@@ -31,6 +31,32 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://localhost:3000"]
     app_base_url: str = "http://localhost:3000"  # used to build links in password-reset/verification emails
 
+    # Redis is only required in production. Locally (environment != "production")
+    # the app uses in-memory fallbacks for rate limiting, login lockout, OTP and
+    # token stores, so it runs with no Redis server at all. Set ENVIRONMENT=
+    # production (or REDIS_ENABLED=true) to switch Redis on.
+    redis_url: str = "redis://localhost:6379"
+    environment: str = "development"  # "development" | "production"
+    redis_enabled: bool | None = None  # explicit override of the default below
+
+    # Refresh-token cookie security. `Secure` cookies are refused by browsers
+    # over plain http://, which silently breaks the web login flow in local dev
+    # (the cookie is dropped, so the middleware bounces every navigation back to
+    # /login). Only enable `Secure` in production, where TLS is present.
+    cookie_secure: bool | None = None  # explicit override; else derived from environment
+
+    @property
+    def use_redis(self) -> bool:
+        if self.redis_enabled is not None:
+            return self.redis_enabled
+        return self.environment.strip().lower() == "production"
+
+    @property
+    def secure_cookies(self) -> bool:
+        if self.cookie_secure is not None:
+            return self.cookie_secure
+        return self.environment.strip().lower() == "production"
+
     @field_validator("jwt_access_secret", "jwt_refresh_secret")
     @classmethod
     def _reject_weak_or_placeholder_secrets(cls, value: str, info) -> str:

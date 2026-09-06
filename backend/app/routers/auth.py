@@ -37,6 +37,7 @@ from typing import Literal
 import hashlib
 import logging
 import os
+import time
 import secrets
 import uuid
 
@@ -85,7 +86,14 @@ Platform = Literal["web", "mobile"]
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/auth"
 
-_otp_redis = redis.from_url(os.environ.get("REDIS_URL", "redis://redis:6379"), decode_responses=True)
+# OTP codes live in Redis in production; in local/dev (no Redis server) we fall
+# back to an in-memory store so OTP sign-in still works for testing.
+_otp_redis = (
+    redis.from_url(settings.redis_url, decode_responses=True, protocol=2)
+    if settings.use_redis
+    else None
+)
+_otp_store: dict[str, tuple[str, float]] = {}
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -93,7 +101,11 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         key=REFRESH_COOKIE_NAME,
         value=refresh_token,
         httponly=True,
-        secure=True,  # requires HTTPS — set up TLS even in staging, not just prod
+        # Only mark the cookie `Secure` when served over HTTPS (production).
+        # Browsers refuse to store/send a Secure cookie over plain http://, which
+        # would break the web login flow in local dev (the cookie is dropped and
+        # the middleware bounces every navigation back to /login).
+        secure=settings.secure_cookies,
         samesite="strict",
         max_age=settings.jwt_refresh_expire_days * 24 * 60 * 60,
         path=REFRESH_COOKIE_PATH,
@@ -452,7 +464,11 @@ def _otp_key(phone: str) -> str:
 @limiter.limit("5/hour")
 async def send_otp(request: Request, body: SendOtpRequest):
     code = str(secrets.randbelow(1000000)).zfill(6)
-    await _otp_redis.set(_otp_key(body.phone), code, ex=300)
+    key = _otp_key(body.phone)
+    if _otp_redis is not None:
+        await _otp_redis.set(key, code, ex=300)
+    else:
+        _otp_store[key] = (code, time.time() + 300)
 
     if os.environ.get("SMS_PROVIDER_API_KEY"):
         logger.info("OTP sent to %s", body.phone)
@@ -470,12 +486,16 @@ async def verify_otp(
     session: AsyncSession = Depends(get_session),
 ):
     key = _otp_key(body.phone)
-    stored_code = await _otp_redis.get(key)
+    if _otp_redis is not None:
+        stored_code = await _otp_redis.get(key)
+        if stored_code is not None:
+            await _otp_redis.delete(key)
+    else:
+        entry = _otp_store.pop(key, None)
+        stored_code = entry[0] if entry is not None and time.time() <= entry[1] else None
 
     if stored_code is None or stored_code != body.code:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP")
-
-    await _otp_redis.delete(key)
 
     result = await session.exec(select(User).where(User.phone == body.phone))
     user = result.first()

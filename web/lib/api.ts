@@ -12,6 +12,7 @@ import type {
   UserPublic,
   WalletBalance,
 } from './types';
+import { clearSessionCookie, setSessionCookie } from './session';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 const PLATFORM_QUERY = 'platform=web';
@@ -89,6 +90,7 @@ export async function refreshSession(): Promise<boolean> {
     });
     if (!res.ok) {
       setAccessToken(null);
+      clearSessionCookie();
       return false;
     }
     const data: TokenPair = await res.json();
@@ -107,6 +109,7 @@ export const api = {
       body: JSON.stringify({ email, password }),
     });
     setAccessToken(data.access_token);
+    setSessionCookie(data.user);
     return data;
   },
 
@@ -116,6 +119,7 @@ export const api = {
       body: JSON.stringify({ email, password, full_name: fullName, role }),
     });
     setAccessToken(data.access_token);
+    setSessionCookie(data.user);
     return data;
   },
 
@@ -125,6 +129,7 @@ export const api = {
       body: JSON.stringify({ id_token: idToken, role }),
     });
     setAccessToken(data.access_token);
+    setSessionCookie(data.user);
     return data;
   },
 
@@ -141,6 +146,7 @@ export const api = {
       body: JSON.stringify({ phone, code }),
     });
     setAccessToken(data.access_token);
+    setSessionCookie(data.user);
     return data;
   },
 
@@ -151,6 +157,7 @@ export const api = {
   async logout(): Promise<void> {
     await request('/auth/logout', { method: 'POST' }).catch(() => {});
     setAccessToken(null);
+    clearSessionCookie();
   },
 
   // ─── Astrologers ─────────────────────────────────────────────────────────

@@ -1,18 +1,20 @@
-import os
-
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-# Redis-backed, NOT the default in-memory store. In-memory rate limiting
-# only works correctly with exactly one worker process — the moment this
-# runs with multiple Uvicorn/Gunicorn workers (which a real VPS deployment
-# does, see docker/backend/Dockerfile), each worker would keep its own
-# separate counter, silently multiplying the effective rate limit by the
-# worker count. Redis gives every worker a shared, correct counter.
-#
-# REDIS_URL defaults to the docker-compose service name ("redis") so this
-# works out of the box in that environment; override it for local dev
-# outside Docker (e.g. "redis://localhost:6379").
-REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379")
+from app.core.config import settings
 
-limiter = Limiter(key_func=get_remote_address, storage_uri=REDIS_URL)
+# In production the rate limiter is backed by Redis so every worker shares one
+# correct counter (in-memory counting would multiply the effective limit by the
+# worker count). Locally (environment != "production") we use slowapi's built-in
+# in-memory store so the app runs with no Redis server at all.
+if settings.use_redis:
+    limiter = Limiter(
+        key_func=get_remote_address,
+        storage_uri=settings.redis_url,
+        # Force RESP2 (protocol=2). redis-py 8.x otherwise attempts the RESP3
+        # `HELLO` handshake on connect, which older / incompatible Redis servers
+        # reject with "unknown command 'HELLO'". RESP2 works with every Redis >= 2.0.
+        storage_options={"protocol": 2},
+    )
+else:
+    limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
