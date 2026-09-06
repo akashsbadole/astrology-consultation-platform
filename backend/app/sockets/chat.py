@@ -84,5 +84,14 @@ def register_chat_events(sio: SocketManager):
 
     @sio.on("typing")
     async def typing(sid, data):
+        session_data = await sio.get_session(sid)
+        user_id = session_data["user_id"]
         consultation_id = data.get("consultationId")
+
+        async for session in get_session():
+            consultation = await _verify_party(session, consultation_id, user_id)
+            if consultation is None:
+                return
+            break
+
         await sio.emit("typing", {}, room=consultation_id, skip_sid=sid)

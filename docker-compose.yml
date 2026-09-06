@@ -103,6 +103,11 @@ services:
       # issues under real concurrent call load.
       - "7880:7880"
       - "50000-50100:50000-50100/udp"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7880"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks: [internal]
 
   web:

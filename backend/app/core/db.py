@@ -31,8 +31,11 @@ engine = create_async_engine(
 
 
 async def init_db() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
+    """Run Alembic migrations instead of create_all — this supports
+    schema evolution after initial deployment."""
+    import subprocess
+    import sys
+    subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

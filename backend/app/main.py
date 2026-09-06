@@ -1,3 +1,5 @@
+import logging
+import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -9,11 +11,28 @@ from fastapi_socketio import SocketManager
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+from app.core.logging import setup_logging
+setup_logging()
+
+if os.environ.get("SENTRY_DSN"):
+    import sentry_sdk
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_logging = LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)
+
+    sentry_sdk.init(
+        dsn=os.environ.get("SENTRY_DSN"),
+        integrations=[sentry_logging],
+        traces_sample_rate=0.1,
+        environment="production",
+    )
+
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.routers import admin, astrologer, auth, calls, consultation, content, kundli, payments, store, users, wallet
 from app.sockets.chat import register_chat_events
 from app.workers.billing_tick import TICK_INTERVAL_SECONDS, run_billing_tick
+from app.workers.reconciliation import reconcile_wallets
 
 scheduler = AsyncIOScheduler()
 
@@ -26,6 +45,7 @@ async def lifespan(app: FastAPI):
     # exists) raises "RuntimeError: no running event loop" and crashes
     # every worker on boot.
     scheduler.add_job(run_billing_tick, "interval", seconds=TICK_INTERVAL_SECONDS, kwargs={"sio": sio})
+    scheduler.add_job(reconcile_wallets, "cron", hour=3, minute=0)  # 3 AM daily
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)

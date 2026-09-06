@@ -29,3 +29,5 @@ apscheduler==3.11.3
 livekit-api==1.2.1
 pyjwt==2.10.1
 psycopg2
+alembic==1.15.0
+sentry-sdk[fastapi]==2.21.0

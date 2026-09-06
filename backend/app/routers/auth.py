@@ -35,9 +35,12 @@ Key design decisions encoded in this file (read before modifying):
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 import hashlib
+import logging
 import os
 import secrets
 import uuid
+
+logger = logging.getLogger(__name__)
 
 import redis.asyncio as redis
 
@@ -452,9 +455,9 @@ async def send_otp(request: Request, body: SendOtpRequest):
     await _otp_redis.set(_otp_key(body.phone), code, ex=300)
 
     if os.environ.get("SMS_PROVIDER_API_KEY"):
-        print(f"[SMS] OTP for {body.phone}: {code}")
+        logger.info("OTP sent to %s", body.phone)
     else:
-        print(f"[DEV] OTP for {body.phone}: {code}")
+        logger.info("OTP sent to %s", body.phone)
 
 
 @router.post("/otp/verify", response_model=TokenPair)

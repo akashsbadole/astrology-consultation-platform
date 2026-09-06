@@ -32,6 +32,7 @@ export LIVEKIT_API_KEY="devkey" LIVEKIT_API_SECRET="devsecret-32-chars-minimum-x
 export SMTP_HOST="localhost" SMTP_PORT="1025"   # see "Testing email locally" below
 
 python -m app.scripts.init_db      # creates the schema — run once, and again after pulling schema changes
+python -m app.scripts.seed_data  # creates test users + wallets
 uvicorn app.main:app --reload      # http://localhost:8000, interactive docs at /docs
 ```
 

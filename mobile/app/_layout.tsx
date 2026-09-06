@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '../lib/store';
 import { api, refreshSession } from '../lib/api';
 import { useAppFonts } from '../theme/useAppFonts';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -58,8 +59,10 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthGuard />
-      <Slot />
+      <ErrorBoundary>
+        <AuthGuard />
+        <Slot />
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }
